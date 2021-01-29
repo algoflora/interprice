@@ -17,8 +17,10 @@
           <th v-for="year in tableYears"
               :key="year"
               colspan="2"
-              class="border-b border-gray-400 w-max m-2" style="border-left: white 10px solid; border-right: white 10px solid;"
-          >{{ year }}</th>
+              class="border-b border-gray-400 w-max m-2"
+              style="border-left: white 10px solid; border-right: white 10px solid;"
+          >{{ year }}
+          </th>
         </tr>
         <tr class="text-gray-400">
           <th class="w-8 border-b-2 border-gray-400"></th>
@@ -39,14 +41,16 @@
             </div>
           </th>
           <template v-for="year in tableYears">
-            <th v-for="couponType in couponTypesList" :key="year + couponType" class="w-16 border-b-2 border-gray-400">{{ couponType }}</th>
+            <th v-for="couponType in $options.couponTypesList" :key="year + couponType"
+                class="w-16 border-b-2 border-gray-400 tracking-tight">{{ couponType }}
+            </th>
           </template>
         </tr>
         </thead>
         <tbody>
-        <template v-for="(company, companyIndex) in sortedTableData">
+        <template v-for="(company, companyIndex) in sortedCompanies">
           <tr :key="'row'+display+company.Company">
-            <td :class="{'border-b border-gray-200': companyIndex !== sortedTableData.length - 1}">
+            <td :class="{'border-b border-gray-200': companyIndex !== sortedCompanies.length - 1}">
               <template v-if="company.Quote !== null">
                 <div v-if="companiesExpanded[company.Id]" @click="$set(companiesExpanded, company.Id, false)"
                      class="cursor-pointer">
@@ -63,27 +67,27 @@
                 </div>
               </template>
             </td>
-            <td class="text-left" :class="{'border-b border-gray-200': companyIndex !== sortedTableData.length - 1}">
+            <td class="text-left" :class="{'border-b border-gray-200': companyIndex !== sortedCompanies.length - 1}">
               <template v-if="company.Quote !== null">
                 <span>{{ formatDate(company.DateSent) }}</span>
               </template>
             </td>
-            <td class="text-left" :class="{'border-b border-gray-200': companyIndex !== sortedTableData.length - 1}">
+            <td class="text-left" :class="{'border-b border-gray-200': companyIndex !== sortedCompanies.length - 1}">
               <span :class="company.Quote != null ? 'font-semibold' : 'font-light'">{{ company.Company }}</span>
             </td>
             <template v-for="year in tableYears">
-              <template v-for="couponType in couponTypesList">
+              <template v-for="couponType in $options.couponTypesList">
                 <td :key="year+couponType"
                     :class="{
-                  'bg-yellow-100': getCellData(company, year, couponType).isMinimum,
-                  'border-b border-gray-200': companyIndex !== sortedTableData.length - 1
+                  'bg-yellow-100': isCellMinimum(company.Id, year, couponType),
+                  'border-b border-gray-200': companyIndex !== sortedCompanies.length - 1
                 }">
                   <template v-if="company.Quote !== null">
                     <div
                         :id="year+couponType"
                         class="mx-1 w-auto h-full flex items-center justify-center"
                     >
-                      <span class="text-sm">{{ getCellData(company, year, couponType).formatted }}</span>
+                      <span class="text-sm">{{ getCellData(company.Id, year, couponType) }}</span>
                     </div>
                   </template>
                 </td>
@@ -93,14 +97,14 @@
           <template v-if="companiesExpanded[company.Id]">
             <tr v-for="additionalDisplay in $options.displaysList.filter(d => d !== display)"
                 :key="'row'+additionalDisplay+company.Company">
-              <td></td>
-              <td></td>
-              <td class="text-left">{{ additionalDisplay }}</td>
+              <td class="border-b border-gray-200"></td>
+              <td class="border-b border-gray-200"></td>
+              <td class="text-left border-b border-gray-200">{{ additionalDisplay }}</td>
               <template v-for="year in tableYears">
-                <template v-for="couponType in couponTypesList">
-                  <td :key="year+couponType">
+                <template v-for="couponType in $options.couponTypesList">
+                  <td :key="year+couponType" class="border-b border-gray-200">
                     <div class="w-full h-full flex items-center justify-center">
-                      <span class="text-sm">{{ getCellData(company, year, couponType, additionalDisplay).formatted }}</span>
+                      <span class="text-sm">{{ getCellData(company.Id, year, couponType, additionalDisplay) }}</span>
                     </div>
                   </td>
                 </template>
@@ -113,7 +117,7 @@
           <td class="border-t border-b border-gray-400"></td>
           <td class="text-left border-t border-b border-gray-400">Average by {{ display }}</td>
           <template v-for="year in tableYears">
-            <template v-for="couponType in couponTypesList">
+            <template v-for="couponType in $options.couponTypesList">
               <td class="border-t border-b last:border-r border-gray-400" :key="year+couponType">
                 <div class="w-full h-full flex items-center justify-center">
                   <span class="text-sm">{{ getAverage(year, couponType) }}</span>
@@ -131,7 +135,7 @@
 <script>
 import ButtonsGroup from '@/components/InterPrice/ButtonsGroup'
 import moment from 'moment'
-import {largerEq, mean} from 'mathjs'
+import {mean, min} from 'mathjs'
 
 export default {
   name: 'InterPrice',
@@ -167,13 +171,8 @@ export default {
     tableYears() {
       return this.getYears().filter(year => this.selectedYears[year])
     },
-    couponTypesList() {
-      return [...new Set(
-          this.quotes.flatMap(quote => quote.map(quoteItem => quoteItem.CouponType))
-      )].sort()
-    },
-    sortedTableData() {
-      return Array.from(this.tableData).sort((a, b) => {
+    sortedCompanies() {
+      const sorter = (a, b) => {
         if (a.Quote === null && b.Quote !== null) return 1
         if (a.Quote !== null && b.Quote === null) return -1
 
@@ -184,63 +183,63 @@ export default {
         if (aVal > bVal) return order
 
         return a.Preferred > b.Preferred ? order : 0
-      })
+      }
+
+      return Array.from(this.companies).sort(sorter)
+          .concat(Array.from(this.nullCompanies).sort(sorter))
+    },
+    filteredCompanies() {
+      return this.items.filter(item => item.Company.toLowerCase().includes(this.filterString.toLowerCase()))
+    },
+    companies() {
+      return this.filteredCompanies.filter(company => company.Quote !== null)
+    },
+    nullCompanies() {
+      return this.filteredCompanies.filter(company => company.Quote === null)
     },
     tableData() {
-      return this.items
-          .filter(item => item.Company.toLowerCase().includes(this.filterString.toLowerCase()))
-          .map(item => {
-                const quote = item.Quote || []
-                const byCurrency = Object.fromEntries(
-                    this.currenciesList.map(currency => {
-                      const byYear = Object.fromEntries(
-                          this.getYears().map(year => {
-                            const byCouponType = Object.fromEntries(
-                                this.couponTypesList.map(couponType => {
-                                  const value = quote.find(quoteItem =>
-                                      quoteItem.CouponType === couponType
-                                      && quoteItem.Years === parseInt(year)
-                                      && quoteItem.Currency === currency
-                                  )
-                                  const byDisplay = Object.fromEntries(
-                                      this.$options.displaysList.map(display => {
-                                        if (value !== undefined && value[display] !== null) {
-                                          const values = this.items
-                                              .filter(it => it.Id !== item.Id && it.Quote !== null)
-                                              .flatMap(it =>
-                                                  it.Quote
-                                                      .filter(quoteItem =>
-                                                          quoteItem.CouponType === couponType
-                                                          && quoteItem.Years === parseInt(year)
-                                                          && quoteItem.Currency === currency
-                                                      )
-                                                      .map(item => item[display])
-                                              )
-                                              .filter(n => n !== null)
+      const variants = this.companies.map(company => ({company}))
+          .flatMap(variant =>
+              this.currenciesList.map(currency => Object.assign({currency}, variant)))
+          .flatMap(variant =>
+              this.getYears().map(year => Object.assign({year}, variant)))
+          .flatMap(variant =>
+              this.$options.couponTypesList.map(couponType => Object.assign({couponType}, variant)))
+          .flatMap(variant =>
+              this.$options.displaysList.map(display => Object.assign({display}, variant)))
 
-                                          const formatted = this.formatVal(value[display], display)
-                                          const isMinimum = couponType === 'FIX' ?
-                                              values.every(n => largerEq(n, value[display])) : false
+      const groupBy = (vs, f1, f2) =>
+          vs.reduce((acc, v) => {
+            const k = f1(v);
+            (acc[k] = acc[k] || []).push(f2(v))
+            return acc
+          }, {})
 
-                                          return [display, {value: value[display], formatted: formatted, isMinimum: isMinimum}]
-                                        } else {
-                                          return [display, {value: null, formatted: '', isMinimum: false}]
-                                        }
-                                      })
-                                  )
+      const byColumnsAndDisplays = groupBy(
+          variants,
+          v => [v.currency, v.year, v.couponType, v.display].join('.'),
+          v => {
+            const values = v.company.Quote.find(quoteItem =>
+                quoteItem.CouponType === v.couponType
+                && quoteItem.Years === parseInt(v.year)
+                && quoteItem.Currency === v.currency);
 
-                                  return [couponType, byDisplay]
-                                })
-                            )
-                            return [year, byCouponType]
-                          })
-                      )
-                      return [currency, byYear]
-                    })
-                )
-                return Object.assign(item, byCurrency)
-              }
-          )
+            return [v.company.Id, (values && values[v.display]) || null]
+          }
+      )
+
+      Object.keys(byColumnsAndDisplays).forEach(key => {
+        const byColumnAndDisplay = byColumnsAndDisplays[key]
+
+        const values = byColumnAndDisplay.map(x => x[1]).filter(x => x !== null)
+        const [minimum, average] = values.length ? [min(values), mean(values)] : [null, null]
+
+        const byCompany = Object.fromEntries(byColumnAndDisplay)
+
+        byColumnsAndDisplays[key] = { minimum, average, byCompany }
+      })
+
+      return (byColumnsAndDisplays)
     }
   },
   methods: {
@@ -271,29 +270,35 @@ export default {
         this.sort.field = field
       }
     },
-    formatDate(dateSent) {
-      return moment(dateSent).format('DD-MMM-YY')
+    formatDate(date) {
+      return moment(date).format('DD-MMM-YY')
     },
-    formatVal(val, display = this.display) {
+    formatCellValue(val, display = this.display) {
+      if (val === undefined || val === null) {
+        return null
+      }
       return display === 'Yield' ?
           val.toFixed(3) + '%' :
           (val > 0 ? '+' : '') + val.toFixed(0) + 'bp'
     },
-    getCellData(company, year, couponType, display = this.display) {
-      return company[this.currency][year]
-          && company[this.currency][year][couponType]
-          && company[this.currency][year][couponType][display]
+    getCellDataSummarized(year, couponType, display = this.display) {
+      const key = [this.currency, year, couponType, display].join('.')
+      return  this.tableData[key]
+    },
+    getCellData(companyId, year, couponType, display = this.display) {
+      const value = this.getCellDataSummarized(year, couponType, display).byCompany[companyId]
+      return this.formatCellValue(value, display)
+    },
+    isCellMinimum(companyId, year, couponType, display = this.display) {
+      if (couponType !== 'FIX') {
+        return false
+      }
+      const summarized = this.getCellDataSummarized(year, couponType, display)
+      return summarized.minimum !== null && summarized.minimum === summarized.byCompany[companyId]
     },
     getAverage(year, couponType) {
-      const values = this.sortedTableData
-          .map(company => this.getCellData(company, year, couponType).value)
-          .filter(n => n !== null)
-      if (values.length > 0) {
-        const average = mean(values)
-        return this.formatVal(average)
-      } else {
-        return null
-      }
+      const averageValue = this.getCellDataSummarized(year, couponType).average
+      return this.formatCellValue(averageValue)
     }
   },
   mounted() {
@@ -307,6 +312,7 @@ export default {
   }
   ,
   displaysList: ['Spread', 'Yield', '3MLSpread'],
+  couponTypesList: ['FIX', 'FRN'],
   components: {
     ButtonsGroup
   }
