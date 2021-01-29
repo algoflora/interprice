@@ -1,17 +1,18 @@
 <template>
   <div id="app">
-    <img alt="Vue logo" src="./assets/logo.png">
-    <HelloWorld msg="Welcome to Your Vue.js App"/>
+    <inter-price :data="$options.dataJson"/>
   </div>
 </template>
 
 <script>
-import HelloWorld from './components/HelloWorld.vue'
+import InterPrice from './components/InterPrice.vue'
+import DATA_JSON from './assets/data.json'
 
 export default {
   name: 'App',
+  dataJson: DATA_JSON,
   components: {
-    HelloWorld
+    InterPrice
   }
 }
 </script>
